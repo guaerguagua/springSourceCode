@@ -1247,6 +1247,7 @@ invoke方法有三个参数：
 * Object proxy ：生成的代理对象
 * Method method：目标对象的方法，通过反射调用
 * Object[] args：目标对象方法的参数
+
 这就是Java JDK动态代理的代码实现过程，小结一下，运用JDK动态代理，被代理类(目标对象，如A类)，必须已有实现接口如(ExInterface)，因为JDK提供的Proxy类将通过目标对象的类加载器ClassLoader和Interface，以及句柄(Callback)创建与A类拥有相同接口的代理对象proxy，该代理对象将拥有接口ExInterface中的所有方法，同时代理类必须实现一个类似回调函数的InvocationHandler接口并重写该接口中的invoke方法，当调用proxy的每个方法(如案例中的proxy#execute())时，invoke方法将被调用，利用该特性，可以在invoke方法中对目标对象(被代理对象如A)方法执行的前后动态添加其他外围业务操作，此时无需触及目标对象的任何代码，也就实现了外围业务的操作与目标对象(被代理对象如A)完全解耦合的目的。当然缺点也很明显需要拥有接口，这也就有了后来的CGLIB动态代理了
 ### CGLIB动态代理
 通过CGLIB动态代理实现上述功能并不要求目标对象拥有接口类，实际上CGLIB动态代理是通过继承的方式实现的，因此可以减少没必要的接口，下面直接通过简单案例协助理解（CGLIB是一个开源项目，github网址是：https://github.com/cglib/cglib）。
