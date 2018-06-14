@@ -225,11 +225,12 @@ public aspect MyAspectJDemo {
 ok~，运行helloworld的main函数：
 ![](./4.png)
 >我这里报了一些错误，可能是编译器配置的问题。
->![](./5.png)
+>![](./5.png) 
 
 对于结果不必太惊讶，完全是意料之中。我们发现，明明只运行了main函数，却在sayHello函数运行前后分别进行了权限验证和日志记录，事实上这就是AspectJ的功劳了。对aspectJ有了感性的认识后，再来聊聊aspectJ到底是什么？AspectJ是一个java实现的AOP框架，它能够对java代码进行AOP编译（一般在编译期进行），让java代码具有AspectJ的AOP功能（当然需要特殊的编译器），可以这样说AspectJ是目前实现AOP框架中最成熟，功能最丰富的语言，更幸运的是，AspectJ与java程序完全兼容，几乎是无缝关联，因此对于有java编程基础的工程师，上手和使用都非常容易。在案例中，我们使用aspect关键字定义了一个类，这个类就是一个切面，它可以是单独的日志切面(功能)，也可以是权限切面或者其他，在切面内部使用了pointcut定义了两个切点，一个用于权限验证，一个用于日志记录，而所谓的切点就是那些需要应用切面的方法，如需要在sayHello方法执行前后进行权限验证和日志记录，那么就需要捕捉该方法，而pointcut就是定义这些需要捕捉的方法（常常是不止一个方法的），这些方法也称为目标方法，最后还定义了两个通知，通知就是那些需要在目标方法前后执行的函数，如before()即前置通知在目标方法之前执行，即在sayHello()方法执行前进行权限验证，另一个是after()即后置通知，在sayHello()之后执行，如进行日志记录。到这里也就可以确定，切面就是切点和通知的组合体，组成一个单独的结构供后续使用。
 这里简单说明一下切点的定义语法：关键字为pointcut，定义切点，后面跟着函数名称，最后编写匹配表达式，此时函数一般使用call()或者execution()进行匹配，这里我们统一使用call()
 >pointcut 函数名 : 匹配表达式
+
 案例：recordLog()是函数名称，自定义的，* 表示任意返回值，接着就是需要拦截的目标函数，sayHello(..)的..，表示任意参数类型。这里理解即可，后面Spring AOP会有关于切点表达式的分析，整行代码的意思是使用pointcut定义一个名为recordLog的切点函数，其需要拦截的(切入)的目标方法是HelloWord类下的sayHello方法，参数不限。
 关于定义通知的语法：首先通知有5种类型分别如下：
 
@@ -344,3 +345,37 @@ public class HelloWord {
     }
 }
 ```
+显然AspectJ的织入原理已很明朗了，当然除了编译期织入，还存在链接期(编译后)织入，即将aspect类和java目标类同时编译成字节码文件后，再进行织入处理，这种方式比较有助于已编译好的第三方jar和Class文件进行织入操作，由于这不是本篇的重点，暂且不过多分析，掌握以上AspectJ知识点就足以协助理解Spring AOP了。有些同学可能想自己编写aspect程序进行测试练习，博主在这简单介绍运行环境的搭建，首先博主使用的idea的IDE，因此只对idea进行介绍(eclipse，呵呵)。首先通过maven仓库下载工具包aspectjtools-1.8.9.jar，该工具包包含ajc核心编译器，然后打开idea检查是否已安装aspectJ的插件
+！[](./8.png)
+配置项目使用ajc编译器(替换javac)如下图：
+![](./9.png)
+如果使用maven开发（否则在libs目录自行引入jar）则在pom文件中添加aspectJ的核心依赖包，包含了AspectJ运行时的核心库文件：
+```xml
+<dependency>
+    <groupId>aspectj</groupId>
+    <artifactId>aspectjrt</artifactId>
+    <version>1.5.4</version>
+</dependency>
+```
+新建文件处创建aspectJ文件，然后就可以像运行java文件一样，操作aspect文件了。
+![](./10.png)
+
+## 基于Aspect Spring AOP 开发
+### 简单案例快速入门
+### 再谈Spring AOP 术语
+## 基于注解的Spring AOP开发
+### 定义切入点函数
+### 切入点指示符
+#### 通配符
+#### 类型签名表达式
+#### 方法签名表达式
+#### 其他指示符
+### 通知函数以及传递参数
+#### 5种通知函数
+#### 通知传递参数
+### Aspect优先级
+### 基于XML的开发
+### Spring AOP 简单应用场景
+## Spring AOP的实现原理概要
+### JDK动态代理
+### CGLIB动态代理
