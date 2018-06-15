@@ -64,21 +64,12 @@ public class TicketDemo {
 ### 通过锁（Lock）对象的方式解决线程安全问题
 在给出解决代码前我们先来介绍一个知识点：Lock，锁对象。在java中锁是用来控制多个线程访问共享资源的方式，一般来说，一个锁能够防止多个线程同时访问共享资源（但有的锁可以允许多个线程并发访问共享资源，比如读写锁，后面我们会分析）。在Lock接口出现之前，java程序是靠synchronized关键字（后面分析）实现锁功能的，而JAVA SE5.0之后并发包中新增了Lock接口用来实现锁的功能，它提供了与synchronized关键字类似的同步功能，只是在使用时需要显式地获取和释放锁，缺点就是缺少像synchronized那样隐式获取释放锁的便捷性，但是却拥有了锁获取与释放的可操作性，可中断的获取锁以及超时获取锁等多种synchronized关键字所不具备的同步特性。接下来我们就来介绍Lock接口的主要API方便我们学习
 
-| 水果        | 价格    |  数量  |
-| --------   | -----:   | :----: |
-| 香蕉        | $1      |   5    |
-| 苹果        | $1      |   6    |
-| 草莓        | $1      |   7    |
-
 |方法	|相关描述内容			|
 |----	|-------------------|
 |void lock()|	获取锁，调用该方法当前线程会获取锁，当获取锁后。从该方法返回|
 |void lockInterruptibly()throwsInterruptedException|可中断获取锁和lock()方法不同的是该方法会响应中断，即在获取锁中可以中断当前线程。例如某个线程在等待一个锁的控制权的这段时间需要中断。|
 |boolean tryLock()|	尝试非阻塞获取锁，调用该方法后立即返回，如果能够获取锁则返回true，否则返回false。|
-|boolean tryLock(long time,TimeUnit unit)throws  InterruptedException|	超时获取锁，当前线程在以下3种情况返回：
-1.当前线程在超时时间内获取了锁
-2.当前线程在超时时间被中断
-3.当前线程超时时间结束，返回false|
+|boolean tryLock(long time,TimeUnit unit)throws  InterruptedException|超时获取锁，当前线程在以下3种情况返回：1.当前线程在超时时间内获取了锁2.当前线程在超时时间被中断3.当前线程超时时间结束，返回false|
 |void unlock()	|释放锁|
 |Condition newCondition()|条件对象，获取等待通知组件。该组件和当前的锁绑定，当前线程只有获取了锁，才能调用该组件的await()方法，而调用后，当前线程将缩放锁。|
 
