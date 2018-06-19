@@ -9,6 +9,15 @@
 在现代操作在运行一个程序时，会为其创建一个进程。例如启动一个QQ程序，操作系统就会为其创建一个进程。而操作系统中调度的最小单位元是线程，也叫轻量级进程，在一个进程里可以创建多个线程，这些线程都拥有各自的计数器，堆栈和局部变量等属性，并且能够访问共享的内存变量。处理器在这些线程上高速切换，让使用者感觉到这些线程在同时执行。因此我们可以这样理解：
 进程：正在运行的程序，是系统进行资源分配和调用的独立单位。每一个进程都有它自己的内存空间和系统资源。
 线程：是进程中的单个顺序控制流，是一条执行路径一个进程如果只有一条执行路径，则称为单线程程序。一个进程如果有多条执行路径，则称为多线程程序。
+我们知道，线程是币进程更轻量级的调度执行单位，线程的引入，可以把一个进程的资分配和执行调度分开，各个线程既可以共享进程资源（内存地址、文件IO等），又可以独立调度，线程是CPU调度的基本单位。
+主流的操作系统都提供了线程的实现，Java语言则提供了不同硬件和操作系统平台下对线程操作的统一处理，每个已经执行start()且未结束的java.lang.Thread类的实例就代表了一个线程。Thread的所有关键方法都是声明为nativede ，在JavaAPI中，一个native方法往往意味着这个方法没有使用或者无法使用平台无关的手段来实现，当然也有可能是为了执行效率而使用native方法。实现线程主要有3种方式：使用内核线程实现，使用用户线程实现和使用用户线程加轻量级进程混合实现。
+
+* 使用内核线程实现：这种实现方式线程直接由操作系统内核支持。程序一般不会直接去使用内核线程，而是去使用内核线程的一种高级接口——轻量级进程，轻量级进程与内核线程之间是1:1的关系，称为一对一的线程模型 。
+![](./5.png)
+* 使用用户线程实现：用户线程完全建立在用户空间的线程库上，系统内核不能感知其存在。 用户线程的建立、 同步、 销毁和调度完全在用户态中完成，不需要内核的帮助。进程与用户线程为1：N的关系。Java早起曾采用该种实现，现已放弃。
+* 使用用户线程加轻量级进程混合实现 这种实现方式将内核线程与用户线程一起使用，在这种混合实现下，既存在用户线程，也存在轻量级进程。 用户线程还是完全建立在用户空间中 。用户线程与轻量级进程为N:M的关系。
+
+在JDK1.2以后的版本中，线程模型是基于操作系统原生线程模型来实现的，对于Sun JDK来说，它的Windows版与Linux版都是使用一对一的线程模型实现的，一条Java线程就映射到一条轻量级进程之中，因为Windows和Linux系统提供的线程模型就是一对一的。
 ## 多线程的创建与启动
 创建多线程有两种方法，一种是继承Thread类重写run方法，另一种是实现Runnable接口重写run方法。下面我们分别给出代码示例，继承Thread类重写run方法：
 ```java
@@ -65,73 +74,89 @@ public class MainTest {
 }
 ```
 运行结果：
-```java
+```text
 I'm a thread that extends Thread!  
 I'm a thread that implements Runnable !  
 ```
 代码相当简单，不过多解释。这里有点需要注意的是调用start()方法后并不是是立即的执行多线程的代码，而是使该线程变为可运行态，什么时候运行多线程代码是由操作系统决定的。
 ## 中断线程和守护线程以及线程优先级
 ### 什么是中断线程？
-我们先来看看中断线程是什么？(该解释来自java核心技术一书，我对其进行稍微简化)，当线程的run()方法执行方法体中的最后一条语句后，并经由执行return语句返回时，或者出现在方法中没有捕获的异常时线程将终止。在java早期版本中有一个stop方法，其他线程可以调用它终止线程，但是这个方法现在已经被弃用了，因为这个方法会造成一些线程不安全的问题。我们可以把中断理解为一个标识位的属性，它表示一个运行中的线程是否被其他线程进行了中断操作，而中断就好比其他线程对该线程打可个招呼，其他线程通过调用该线程的interrupt方法对其进行中断操作，当一个线程调用interrupt方法时，线程的中断状态（标识位）将被置位（改变），这是每个线程都具有的boolean标志，每个线程都应该不时的检查这个标志，来判断线程是否被中断。而要判断线程是否被中断，我们可以使用如下代码:
+我们来考虑一些场景。
+* 比如我们会启动多个线程做同一件事，比如抢12306的火车票，我们可能开启多个线程从多个渠道买火车票，只要有一个渠道买到了，我们会通知取消其他渠道。这个时候需要关闭其他线程
+* 很多线程的运行模式是死循环，比如在生产者/消费者模式中，消费者主体就是一个死循环，它不停的从队列中接受任务，执行任务，在停止程序时，我们需要一种”优雅”的方法以关闭该线程在一些场景中。
+* 从第三方服务器查询一个结果，我们希望在限定的时间内得到结果，如果得不到，我们会希望取消该任务。
+这个时候就需要中断这些线程。
+我们先来看看中断线程是什么？(该解释来自java核心技术一书，我对其进行稍微简化)，当线程的run()方法执行方法体中的最后一条语句后，并经由执行return语句返回时，或者出现在方法中没有捕获的异常时线程将终止。在java早期版本中有一个stop方法，其他线程可以调用它终止线程，但是这个方法现在已经被弃用了，因为这个方法会造成一些线程不安全的问题。我们可以把中断理解为一个标识位的属性，它表示一个运行中的线程是否被其他线程进行了中断操作，而中断就好比其他线程对该线程打可个招呼，其他线程通过调用该线程的interrupt方法对其进行中断操作，当一个线程调用interrupt方法时，线程的中断状态（标识位）将被置位（改变），这是每个线程都具有的boolean标志，每个线程都应该不时的检查这个标志，来判断线程是否被中断。
+但是如果此时线程处于阻塞状态（sleep或者wait），无法获取cpu执行时间，就无法检查中断状态，此时调用这个阻塞线程中断方法的线程就会抛出InterruptedException异常。
+
+#### 废弃的API
+Thread.STOP()之类的api会造成一些不可预知的bug，所以很早便Deprecated了，真要纠结为什么请看这边文章[《为何不赞成使用 Thread.stop、Thread.suspend 和 Thread.resume》](https://docs.oracle.com/javase/6/docs/technotes/guides/concurrency/threadPrimitiveDeprecation.html)
+#### 线程中断API
+|AIP|作用|
+|---|---|
+|public static boolean interrupted|就是返回对应线程的中断标志位是否为true，但它还有一个重要的副作用，就是清空中断标志位，也就是说，连续两次调用interrupted()，第一次返回的结果为true，第二次一般就是false (除非同时又发生了一次中断)。|
+|public boolean isInterrupted()|就是返回对应线程的中断标志位是否为true|
+|public void interrupt()|表示中断对应的线程|
+#### 线程对中断的反应
+* RUNNABLE：线程在运行或具备运行条件只是在等待操作系统调度
+* WAITING/TIMED_WAITING：线程在等待某个条件或超时
+* BLOCKED：线程在等待锁，试图进入同步块
+* NEW/TERMINATED：线程还未启动或已结束
+* IO操作：线程在等待输入输入流的完成，比如文件IO，网络IO等。
+
+##### RUNNABLE状态
+如果线程在运行中，interrupt()只是会设置线程的中断标志位，没有任何其它作用。线程应该在运行过程中合适的位置检查中断标志位，比如说，如果主体代码是一个循环，可以在循环开始处进行检查，如下所示：
 ```java
-Thread.currentThread().isInterrupted()  
-while(!Thread.currentThread().isInterrupted()){  
-    do something  
-}  
+public class InterruptRunnableDemo extends Thread {
+    @Override
+    public void run() {
+        while (!Thread.currentThread().isInterrupted()) {
+            // ... 单次循环代码
+        }
+        System.out.println("done ");
+    }
+    public static void main(String[] args) throws InterruptedException {
+        Thread thread = new InterruptRunnableDemo();
+        thread.start();
+        Thread.sleep(1000);
+        thread.interrupt();
+    }
+}
 ```
-但是如果此时线程处于阻塞状态（sleep或者wait），就无法检查中断状态，此时会抛出InterruptedException异常。如果每次迭代之后都调用sleep方法（或者其他可中断的方法），isInterrupted检测就没必要也没用处了，如果在中断状态被置位时调用sleep方法，它不会休眠反而会清除这一休眠状态并抛出InterruptedException。所以如果在循环中调用sleep,不要去检测中断状态，只需捕获InterruptedException。代码范例如下：
+##### WAITING/TIMED_WAITING
+线程执行如下方法会进入WAITTING状态:
 ```java
-public void run(){  
-        while(more work to do ){  
-            try {  
-                Thread.sleep(5000);  
-            } catch (InterruptedException e) {  
-                //thread was interrupted during sleep  
-                e.printStackTrace();  
-            }finally{  
-                //clean up , if required  
-            }  
-        }  
+public final void join() throws InterruptedException
+public final void wait() throws InterruptedException
 ```
-同时还有点要注意的就是我们在捉中断异常时尽量按如下形式处理，不要留空白什么都不处理！
-不妥的处理方式：
+线程执行如下方法会进入TIMED_WAITING状态：
 ```java
-void myTask(){  
-    ...  
-   try{  
-       sleep(50)  
-      }catch(InterruptedException e){  
-   ...  
-   }  
-} 
+public final native void wait(long timeout) throws InterruptedException;
+public static native void sleep(long millis) throws InterruptedException;
+public final synchronized void join(long millis) throws InterruptedException
+
 ```
-正确的处理方式：
+在这些状态时，对线程对象调用interrupt()会使得该线程抛出InterruptedException，需要注意的是，抛出异常后，中断标志位会被清空(线程的中断标志位会由true重置为false，因为线程为了处理异常已经重新处于就绪状态。)，而不是被设置。比如说，执行如下代码：
 ```java
-void myTask(){  
-    ...  
-   try{  
-       sleep(50)  
-      }catch(InterruptedException e){  
-   ...  
-   }  
-} 
+Thread t = new Thread (){
+    @Override
+    public void run() {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+        //exception被捕获，但是为输出为false 因为标志位会被清空
+            System.out.println(isInterrupted());
+        }
+    }        
+};
+t.start();
+try {
+    Thread.sleep(100);
+} catch (InterruptedException e) {
+}
+t.interrupt();//置为true
 ```
-或者
-```java
-void myTask(){  
-    ...  
-    try{  
-    sleep(50)  
-    }catch(InterruptedException e){  
-     Thread.currentThread().interrupt();  
-    }  
-}  
-```
-最后关于中断线程，我们这里给出中断线程的一些主要方法：
-void interrupt()：向线程发送中断请求，线程的中断状态将会被设置为true，如果当前线程被一个sleep调用阻塞，那么将会抛出interrupedException异常。
-static boolean interrupted()：测试当前线程（当前正在执行命令的这个线程）是否被中断。注意这是个静态方法，调用这个方法会产生一个副作用那就是它会将当前线程的中断状态重置为false。
-boolean isInterrupted()：判断线程是否被中断，这个方法的调用不会产生副作用即不改变线程的当前中断状态。
-static Thread currentThread() : 返回代表当前执行线程的Thread对象。
+#### 如何正确的取消、关闭线程
 ### 什么是守护线程？
 首先我们可以通过t.setDaemon(true)的方法将线程转化为守护线程。而守护线程的唯一作用就是为其他线程提供服务。计时线程就是一个典型的例子，它定时地发送“计时器滴答”信号告诉其他线程去执行某项任务。当只剩下守护线程时，虚拟机就退出了，因为如果只剩下守护线程，程序就没有必要执行了。另外JVM的垃圾回收、内存管理等线程都是守护线程。还有就是在做数据库应用时候，使用的数据库连接池，连接池本身也包含着很多后台线程，监控连接个数、超时时间、状态等等。最后还有一点需要特别注意的是在java虚拟机退出时Daemon线程中的finally代码块并不一定会执行哦，代码示例：
 ```java
