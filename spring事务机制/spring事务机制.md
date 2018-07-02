@@ -47,7 +47,15 @@ Hibernate多年以来一直是事实上的Java持久化标准，但是现在Java
 	<property name="sessionFactory" ref="sessionFactory"/>
 </bean>
 ```
+JpaTransactionManager只需要装配一个JPA实体管理工厂（javax.persistence.EntityManagerFactory接口的任意实现）。JpaTransactionManager将与由工厂所产生的JPA EntityManager合作来构建事务。
 #### Java原生API事务
+如果你没有使用以上所述的事务管理，或者是跨越了多个事务管理源（比如两个或者是多个不同的数据源），你就需要使用JtaTransactionManager：
+```xml
+ <bean id="transactionManager" class="org.springframework.transaction.jta.JtaTransactionManager">
+        <property name="transactionManagerName" value="java:/TransactionManager" />
+ </bean>
+```
+JtaTransactionManager将事务管理的责任委托给javax.transaction.UserTransaction和javax.transaction.TransactionManager对象，其中事务成功完成通过UserTransaction.commit()方法提交，事务失败通过UserTransaction.rollback()方法回滚。
 ### 基本事务属性的定义
 #### 传播行为
 #### 隔离级别
