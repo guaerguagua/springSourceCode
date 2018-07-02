@@ -162,9 +162,74 @@ public static ExecutorService newCachedThreadPool() {
                                       new SynchronousQueue<Runnable>());  
     } 
 ```
-从该静态方法，我们可以看到CachedThreadPool的corePoolSize被设置为0，而maximumPoolSize被设置Integer.MAX_VALUE，即maximumPoolSize是无界的，而keepAliveTime被设置为60L，单位为妙。也就是空闲线程等待时间最长为60秒，超过该时间将会被终止。而且在这里CachedThreadPool使用的是没有容量的SynchronousQueue作为线程池的工作队列，但其maximumPoolSize是无界的，也就是意味着如果主线程提交任务的速度高于maximumPoolSize中线程处理任务的速度时CachedThreadPool将会不断的创建新的线程，在极端情况下，CachedThreadPool会因为创建过多线程而耗尽CPU和内存资源。CachedThreadPool的execute()方法的运行流程：
-https://www.cnblogs.com/MOBIN/p/5436482.html
+从该静态方法，我们可以看到CachedThreadPool的corePoolSize被设置为0，而maximumPoolSize被设置Integer.MAX_VALUE，即maximumPoolSize是无界的，而keepAliveTime被设置为60L，单位为妙。也就是空闲线程等待时间最长为60秒，超过该时间将会被终止。而且在这里CachedThreadPool使用的是没有容量的SynchronousQueue作为线程池的工作队列，但其maximumPoolSize是无界的，也就是意味着如果主线程提交任务的速度高于maximumPoolSize中线程处理任务的速度时CachedThreadPool将会不断的创建新的线程，在极端情况下，CachedThreadPool会因为创建过多线程而耗尽CPU和内存资源。
+这里需要解释一下SynchronousQueue：
+SynchronousQueue与一般的队列不同，它不算一种真正的队列，它没有存储元素的空间，存储一个元素的空间都没有。它的入队操作要等待另一个线程的出队操作，反之亦然。如果没有其他线程在等待从队列中接收元素，put操作就会等待。take操作需要等待其他线程往队列中放元素，如果没有，也会等待。SynchronousQueue适用于两个线程之间直接传递信息、事件或任务。
+CachedThreadPool的execute()方法的运行流程：
+![](./10.png)
+（1）首先执行SynchronousQueue.offer(Runnable task)，添加一个任务。如果当前CachedThreadPool中有空闲线程正在执行SynchronousQueue.poll(keepAliveTime,TimeUnit.NANOSECONDS),其中NANOSECONDS是毫微秒即十亿分之一秒（就是微秒/1000），那么主线程执行offer操作与空闲线程执行poll操作配对成功，主线程把任务交给空闲线程执行，execute()方法执行完成，否则进入第（2）步。
+（2）当CachedThreadPool初始线程数为空时，或者当前没有空闲线程，将没有线程去执行SynchronousQueue.poll(keepAliveTime,TimeUnit.NANOSECONDS)。这样的情况下，步骤（1）将会失败，此时CachedThreadPool会创建一个新的线程来执行任务，execute()方法执行完成。
+（3）在步骤（2）中创建的新线程将任务执行完成后，会执行SynchronousQueue.poll(keepAliveTime,TimeUnit.NANOSECONDS)，这个poll操作会让空闲线程最多在SynchronousQueue中等待60秒，如果60秒内主线程提交了一个新任务，那么这个空闲线程将会执行主线程提交的新任务，否则，这个空闲线程将被终止。由于空闲60秒的空闲线程会被终止，因此长时间保持空闲的 CachedThreadPool是不会使用任何资源的。
+根据前面的分析我们知道SynchronousQueue是一个没有容量的阻塞队列。每个插入操作必须等到一个线程与之对应。CachedThreadPool使用SynchronousQueue，把主线程的任务传递给空闲线程执行。流程如下：
+![](./11.png)
+### SingleThreadExecutor 
+SingleThreadExecutor模式只会创建一个线程。它和FixedThreadPool比较类似，不过线程数是一个。如果多个任务被提交给SingleThreadExecutor的话，那么这些任务会被保存在一个队列中，并且会按照任务提交的顺序，一个先执行完成再执行另外一个线程。SingleThreadExecutor模式可以保证只有一个任务会被执行。这种特点可以被用来处理共享资源的问题而不需要考虑同步的问题。
+创建方式：
+```java
+ExecutorService singleThreadExecutor=Executors.newSingleThreadExecutor();
 
-###
-
+public static ExecutorService newSingleThreadExecutor() {  
+        return new FinalizableDelegatedExecutorService  
+            (new ThreadPoolExecutor(1, 1,  
+                                    0L, TimeUnit.MILLISECONDS,  
+                                    new LinkedBlockingQueue<Runnable>()));  
+    }  
+```
+从静态方法可以看出SingleThreadExecutor的corePoolSize和maximumPoolSize被设置为1，其他参数则与FixedThreadPool相同。SingleThreadExecutor使用的工作队列也是无界队列LinkedBlockingQueue。由于SingleThreadExecutor采用无界队列的对线程池的影响与FixedThreadPool一样，这里就不过多描述了。同样的我们先来看看其运行流程：
+![](./12.png)
+分析：
+（1）如果当前线程数少于corePoolSize即线程池中没有线程运行，则创建一个新的线程来执行任务。
+（2）在线程池的线程数量等于corePoolSize时，将任务加入到LinkedBlockingQueue。
+（3）线程执行完成（1）中的任务后，会在一个无限循环中反复从LinkedBlockingQueue获取任务来执行。
+SingleThreadExecutor使用的案例代码如下：
+```java
+public class SingleThreadExecutor {     
+    public static void main(String[] args) {     
+        ExecutorService exec = Executors.newSingleThreadExecutor();     
+        for (int i = 0; i < 2; i++) {     
+            exec.execute(new LiftOff());     
+        }     
+    }     
+}    
+```
+### 适用的场景
+FixedThreadPool：适用于为了满足资源管理需求，而需要限制当前线程的数量的应用场景，它适用于负载比较重的服务器。
+SingleThreadExecutor：适用于需要保证执行顺序地执行各个任务；并且在任意时间点，不会有多个线程是活动的场景。
+CachedThreadPool：大小无界的线程池，适用于执行很多的短期异步任务的小程序，或者负载较轻的服务器。
 ## ScheduleThreadPoolExecutor
+### ScheduledThreadPoolExecutor执行机制分析
+ScheduledThreadPoolExecutor继承自ThreadPoolExecutor。它主要用来在给定的延迟之后执行任务，或者定期执行任务。ScheduledThreadPoolExecutor的功能与Timer类似，但比Timer更强大，更灵活，Timer对应的是单个后台线程，而ScheduledThreadPoolExecutor可以在构造函数中指定多个对应的后台线程数。接下来我们先来了解一下ScheduledThreadPoolExecutor的运行机制：
+![](./13.png)
+先看DelayQueue：
+延时阻塞队列DelayQueue是一种特殊的优先级队列，它是无界的，DelayQueue的每个元素都是可比较的，它按元素的延时时间出队，它的特殊之处在于，只有当元素的延时过期之后才能被从队列中拿走，也就是说，take方法总是返回第一个过期的元素，如果没有，则阻塞等待，DelayQueue可以用于实现定时任务。
+分析：DelayQueue是一个无界队列，所以ThreadPoolExecutor的maximumPoolSize在ScheduledThreadPoolExecutor中无意义。ScheduledThreadPoolExecutor的执行主要分为以下两个部分
+（1）当调用ScheduledThreadPoolExecutor的scheduleAtFixedRate()方法或者scheduleWithFixedDelay()方法时，会向ScheduledThreadPoolExecutor的DelayQueue添加一个实现了RunnableScheduledFuture接口的ScheduleFutureTask。
+（2）线程池中的线程从DelayQueue中获取ScheduleFutureTask，然后执行任务。
+### 如何创建ScheduledThreadPoolExecutor？
+ScheduledThreadPoolExecutor通常使用工厂类Executors来创建，Executors可以创建两种类型的ScheduledThreadPoolExecutor，如下：
+（1）ScheduledThreadPoolExecutor：可以执行并行任务也就是多条线程同时执行。
+（2）SingleThreadScheduledExecutor：可以执行单条线程。
+创建ScheduledThreadPoolExecutor的方法构造如下：
+```java
+public static ScheduledExecutorService newScheduledThreadPool(int corePoolSize)  
+public static ScheduledExecutorService newScheduledThreadPool(int corePoolSize, ThreadFactory threadFactory)  
+```
+创建SingleThreadScheduledExecutor的方法构造如下：
+```java
+public static ScheduledExecutorService newSingleThreadScheduledExecutor()  
+public static ScheduledExecutorService newSingleThreadScheduledExecutor(ThreadFactory threadFactory)  
+```
+ScheduledThreadPoolExecutor：适用于多个后台线程执行周期性任务，同时为了满足资源管理的需求而需要限制后台线程数量的应用场景。
+SingleThreadScheduledExecutor：适用于需要单个后台线程执行周期任务，同时需要保证任务顺序执行的应用场景。
+### ScheduledThreadPoolExecutor使用案例
+。。。
